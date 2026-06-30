@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AEOS — Platform Deep Dive (Live Prototype)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#0B0E14; --panel:#11151D; --panel2:#161B25; --line:#232A36;
+    --cyan:#4FD1C5; --amber:#E8A33D; --red:#E5484D; --violet:#9B8CFA;
+    --bone:#E6E8EB; --steel:#7B8696;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--void);color:var(--bone);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 24px 60px;}
+
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .mark{width:28px;height:28px;border:1.5px solid var(--cyan);border-radius:6px;position:relative;flex:none;}
+  .brand .mark::before{content:'';position:absolute;inset:6px;border:1.5px solid var(--cyan);opacity:.5;border-radius:2px;}
+  .brand .name{font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:.12em;font-size:14px;}
+  .brand .name span{color:var(--cyan);}
+  .status{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--steel);display:flex;align-items:center;gap:8px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);animation:pulse 1.8s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+
+  .eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:var(--amber);text-transform:uppercase;margin:30px 0 10px;}
+  h1{font-size:28px;line-height:1.25;margin:0 0 10px;font-weight:800;letter-spacing:-.01em;}
+  h1 em{font-style:normal;color:var(--cyan);}
+  .sub{color:var(--steel);max-width:680px;font-size:14px;line-height:1.65;margin-bottom:24px;}
+
+  /* tab nav */
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:0;flex-wrap:wrap;}
+  .tab{font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.04em;color:var(--steel);background:none;border:none;border-bottom:2px solid transparent;padding:11px 16px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:all .2s ease;}
+  .tab .n{font-size:10px;color:var(--steel);}
+  .tab:hover{color:var(--bone);}
+  .tab.active{color:var(--cyan);border-bottom-color:var(--cyan);}
+  .view{display:none;border:1px solid var(--line);border-top:none;border-radius:0 0 14px 14px;background:var(--panel);min-height:560px;}
+  .view.active{display:block;}
+
+  /* ============ ROUTER VIEW ============ */
+  .console{display:grid;grid-template-columns:230px 1fr 270px;}
+  @media (max-width:900px){.console{grid-template-columns:1fr;}}
+  .rail{border-right:1px solid var(--line);padding:18px 16px;background:var(--panel2);}
+  .rail h3{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--steel);margin:0 0 14px;}
+  .node{display:flex;align-items:center;gap:9px;padding:9px 8px;border-radius:8px;font-size:12px;color:var(--steel);margin-bottom:3px;border:1px solid transparent;transition:all .25s ease;}
+  .node .pip{width:7px;height:7px;border-radius:50%;background:var(--line);flex:none;transition:all .25s ease;}
+  .node.active{color:var(--bone);border-color:var(--cyan);background:rgba(79,209,197,.07);}
+  .node.active .pip{background:var(--cyan);box-shadow:0 0 6px var(--cyan);}
+  .node .lead{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--steel);margin-left:auto;}
+
+  .term{padding:18px 18px 14px;display:flex;flex-direction:column;border-right:1px solid var(--line);}
+  .term-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .term-head h3{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--steel);margin:0;}
+  .log{flex:1;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.75;color:#A9B4C2;max-height:300px;}
+  .log .t{color:var(--steel);margin-right:8px;}
+  .log .lvl-router{color:var(--cyan);} .log .lvl-agent{color:var(--amber);} .log .lvl-sec{color:var(--red);} .log .lvl-ok{color:#7ee2a8;}
+  .log .empty{color:var(--steel);opacity:.7;}
+  .cursor{display:inline-block;width:6px;height:12px;background:var(--cyan);vertical-align:middle;animation:blink 1s steps(1) infinite;}
+  @keyframes blink{50%{opacity:0;}}
+  .examples{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 10px;}
+  .ex-btn{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--steel);background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:5px 10px;cursor:pointer;}
+  .ex-btn:hover{border-color:var(--cyan);color:var(--bone);}
+  .inputrow{display:flex;gap:8px;border-top:1px solid var(--line);padding-top:12px;}
+  .inputrow input{flex:1;background:var(--void);border:1px solid var(--line);border-radius:8px;padding:11px 12px;color:var(--bone);font-family:'JetBrains Mono',monospace;font-size:12px;outline:none;}
+  .inputrow input:focus{border-color:var(--cyan);}
+  .inputrow button{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.05em;background:var(--cyan);color:#06231F;border:none;border-radius:8px;padding:0 16px;cursor:pointer;text-transform:uppercase;}
+  .inputrow button:disabled{opacity:.4;cursor:not-allowed;}
+  .inputrow button:hover:not(:disabled){background:#6EE0D4;}
+
+  .panel{padding:18px 16px;}
+  .panel h3{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--steel);margin:0 0 14px;}
+  .empty-state{color:var(--steel);font-size:11.5px;line-height:1.7;}
+  .field{margin-bottom:14px;}
+  .field .k{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin-bottom:4px;}
+  .field .v{font-size:13.5px;font-weight:600;}
+  .field .v.cyan{color:var(--cyan);} .field .v.amber{color:var(--amber);}
+  .bar-bg{height:6px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:6px;}
+  .bar-fill{height:100%;background:linear-gradient(90deg,var(--cyan),#8be9e0);width:0%;transition:width .9s cubic-bezier(.2,.9,.2,1);}
+  .chip{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:3px 7px;margin:0 5px 5px 0;color:var(--steel);}
+  .sec-flag{display:flex;gap:8px;background:rgba(229,72,77,.08);border:1px solid rgba(229,72,77,.35);border-radius:8px;padding:9px 10px;font-size:11px;color:#F2A8AA;line-height:1.5;margin-top:8px;}
+
+  /* ============ CAPABILITY MAP VIEW ============ */
+  .cap-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);}
+  @media (max-width:760px){.cap-grid{grid-template-columns:1fr 1fr;}}
+  @media (max-width:520px){.cap-grid{grid-template-columns:1fr;}}
+  .cap-card{background:var(--panel);padding:20px;cursor:pointer;transition:background .2s ease;}
+  .cap-card:hover{background:var(--panel2);}
+  .cap-card.open{background:var(--panel2);}
+  .cap-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;}
+  .cap-name{font-weight:700;font-size:14.5px;}
+  .cap-id{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--steel);}
+  .cap-models{display:flex;flex-wrap:wrap;gap:5px;margin:10px 0;}
+  .model-chip{font-family:'JetBrains Mono',monospace;font-size:9.5px;border:1px solid var(--line);border-radius:5px;padding:3px 7px;color:var(--steel);}
+  .model-chip.primary{border-color:var(--cyan);color:var(--cyan);}
+  .cap-desc{font-size:11.5px;color:var(--steel);line-height:1.6;margin-bottom:8px;}
+  .cap-detail{font-size:11px;color:#A9B4C2;line-height:1.7;border-top:1px solid var(--line);margin-top:10px;padding-top:10px;display:none;}
+  .cap-card.open .cap-detail{display:block;}
+  .cap-detail .row{display:flex;justify-content:space-between;margin-bottom:5px;}
+  .cap-detail .row .k{color:var(--steel);}
+  .toggle-hint{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--steel);margin-top:8px;}
+
+  /* ============ LIFECYCLE VIEW ============ */
+  .lc-wrap{padding:26px;}
+  .lc-bar{display:flex;gap:3px;margin-bottom:22px;}
+  .lc-seg{flex:1;height:6px;border-radius:3px;background:var(--line);cursor:pointer;position:relative;}
+  .lc-seg.done{background:var(--cyan);opacity:.55;}
+  .lc-seg.current{background:var(--cyan);}
+  .lc-seg.current::after{content:'';position:absolute;top:-3px;left:50%;transform:translateX(-50%);width:12px;height:12px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan);}
+  .lc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+  .lc-card{border:1px solid var(--line);border-radius:10px;padding:13px;background:var(--panel2);cursor:pointer;transition:all .2s ease;}
+  .lc-card:hover{border-color:var(--steel);}
+  .lc-card.done{opacity:.55;}
+  .lc-card.current{border-color:var(--cyan);background:rgba(79,209,197,.07);}
+  .lc-num{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--steel);margin-bottom:5px;}
+  .lc-card.current .lc-num{color:var(--cyan);}
+  .lc-title{font-size:12.5px;font-weight:600;}
+  .lc-detail{margin-top:24px;border:1px solid var(--line);border-radius:10px;padding:18px;background:var(--panel2);}
+  .lc-detail h4{margin:0 0 8px;font-size:15px;}
+  .lc-detail p{margin:0;font-size:12px;color:var(--steel);line-height:1.7;}
+
+  /* ============ METRICS VIEW ============ */
+  .met-wrap{padding:26px;}
+  .met-section{margin-bottom:28px;}
+  .met-section h4{font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);margin:0 0 14px;}
+  .met-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .met-card{background:var(--panel2);padding:16px;}
+  .met-label{font-size:11px;color:var(--steel);margin-bottom:8px;line-height:1.4;}
+  .met-target{font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;color:var(--cyan);}
+  .met-note{font-size:10px;color:var(--steel);margin-top:4px;}
+  .tbd-banner{display:flex;gap:10px;background:rgba(232,163,61,.08);border:1px solid rgba(232,163,61,.35);border-radius:10px;padding:13px 15px;font-size:11.5px;color:#F0C27B;line-height:1.6;margin-bottom:22px;}
+
+  .footnote{margin:18px 0 0;font-size:11px;color:var(--steel);line-height:1.7;padding:16px 0 0;}
+  .footnote b{color:var(--bone);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand"><div class="mark"></div><div class="name">AEOS<span>::</span>PLATFORM</div></div>
+    <div class="status"><span class="dot"></span> DEEP DIVE — DEMO MODE</div>
+  </div>
+
+  <div class="eyebrow">Platform Deep Dive — Live Prototype</div>
+  <h1>Four working views into how <em>AEOS</em> actually operates.</h1>
+  <p class="sub">Beyond the routing demo: the full capability map each division routes to, the 13-phase project lifecycle every task moves through, and the governance/enterprise metrics framework that holds it accountable. Click around — every view here is interactive.</p>
+
+  <div class="tabs" id="tabs"></div>
+
+  <!-- VIEW 1: ROUTER -->
+  <div class="view active" id="view-router">
+    <div class="console">
+      <div class="rail">
+        <h3>Org / Division Map</h3>
+        <div id="nodes"></div>
+      </div>
+      <div class="term">
+        <div class="term-head"><h3>Routing Trace</h3><span class="mono" style="font-size:10px;color:var(--steel);">live</span></div>
+        <div class="log" id="log"><div class="empty">— awaiting input. Try an example below, or type your own task. —</div></div>
+        <div class="examples" id="examples"></div>
+        <div class="inputrow">
+          <input id="taskInput" class="mono" type="text" placeholder="e.g. build a customer onboarding flow for QTRA pilot clients" maxlength="160">
+          <button id="runBtn">Route →</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Routing Decision</h3>
+        <div id="decision"><div class="empty-state">No task submitted yet. Once routed, you'll see the assigned division, confidence score, agent chain, and estimated handling time here.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW 2: CAPABILITY MAP -->
+  <div class="view" id="view-capmap">
+    <div class="cap-grid" id="capGrid"></div>
+  </div>
+
+  <!-- VIEW 3: LIFECYCLE -->
+  <div class="view" id="view-lifecycle">
+    <div class="lc-wrap">
+      <div class="lc-bar" id="lcBar"></div>
+      <div class="lc-grid" id="lcGrid"></div>
+      <div class="lc-detail" id="lcDetail"></div>
+    </div>
+  </div>
+
+  <!-- VIEW 4: METRICS -->
+  <div class="view" id="view-metrics">
+    <div class="met-wrap">
+      <div class="tbd-banner">⚠ These are illustrative target ranges for a seed-stage AI holding platform, not measured results — AEOS is pre-revenue. Replace with real figures once instrumented in production.</div>
+      <div id="metSections"></div>
+    </div>
+  </div>
+
+  <div class="footnote">
+    <b>What's real vs. simulated:</b> the routing logic in the Router tab runs live against your input. The Capability Map, Lifecycle, and Metrics tabs are interactive structural views of the platform design (from the AEOS charter) — they demonstrate the architecture clearly rather than executing live model calls. In production, each capability card maps to an actual model-routing config and each lifecycle phase to real gate criteria.
+  </div>
+</div>
+
+<script>
+/* ---------------- TAB SYSTEM ---------------- */
+const TABS = [
+  { id:'router', label:'Capability Router', n:'01' },
+  { id:'capmap', label:'Capability Map', n:'02' },
+  { id:'lifecycle', label:'Project Lifecycle', n:'03' },
+  { id:'metrics', label:'Metrics & Governance', n:'04' },
+];
+const tabsEl = document.getElementById('tabs');
+TABS.forEach((t,i)=>{
+  const b = document.createElement('button');
+  b.className = 'tab' + (i===0?' active':'');
+  b.id = 'tab-'+t.id;
+  b.innerHTML = `<span class="n">${t.n}</span> ${t.label}`;
+  b.onclick = ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById('view-'+t.id).classList.add('active');
+  };
+  tabsEl.appendChild(b);
+});
+
+/* ---------------- VIEW 1: ROUTER ---------------- */
+const DIVISIONS = [
+  { id:'research', label:'Research', lead:'R-LEAD', keywords:['research','market','analysis','study','validate','feasibility','benchmark','competitor','trend'],
+    desc:'Market validation, competitive analysis, feasibility studies.', models:[{n:'Claude Opus',p:true},{n:'GPT-4 class',p:false}], sample:'Validate market size for IQF green pea exports from Maharashtra' },
+  { id:'product', label:'Product', lead:'P-LEAD', keywords:['product','feature','roadmap','spec','requirement','user','onboarding','flow','ux','design','prototype'],
+    desc:'Specs, roadmaps, UX flows, prototypes.', models:[{n:'Claude Sonnet',p:true},{n:'Claude Opus',p:false}], sample:'Design the onboarding flow for QTRA pilot clients' },
+  { id:'engineering', label:'Engineering', lead:'E-LEAD', keywords:['build','deploy','api','bug','fix','code','infra','backend','frontend','database','integration','app','dashboard','website'],
+    desc:'Build, deploy, debug — the execution layer.', models:[{n:'Claude Sonnet',p:true},{n:'Local Qwen2.5-Coder',p:false}], sample:'Fix the GSAP animation visibility bug on the MIRRCWEM site' },
+  { id:'ai', label:'AI / ML', lead:'AI-LEAD', keywords:['model','train','ai','ml','agent','llm','inference','embedding','fine-tune','router','dataset','prompt'],
+    desc:'Model selection, fine-tuning, the router itself.', models:[{n:'Claude Opus',p:true},{n:'Ollama / local',p:false}], sample:'Fine-tune the capability router on new agent task data' },
+  { id:'security', label:'Security (QTRA)', lead:'SEC-LEAD', keywords:['security','pentest','vulnerability','audit','compliance','encrypt','quantum','breach','risk','threat','cyber'],
+    desc:'QTRA anchor product — quantum-resilient security review.', models:[{n:'Claude Opus',p:true},{n:'Specialist sec model',p:false}], sample:'Run a penetration test on the QTRA pilot environment' },
+  { id:'growth', label:'Growth / BD', lead:'GR-LEAD', keywords:['pitch','investor','fundraise','deck','sales','partnership','outreach','pilot','client','grant','scheme'],
+    desc:'Fundraising, partnerships, pilot acquisition.', models:[{n:'Claude Sonnet',p:true},{n:'Claude Opus',p:false}], sample:'Draft the Series A investor deck and fundraise narrative' },
+  { id:'governance', label:'Governance', lead:'GOV-LEAD', keywords:['policy','legal','contract','dpiit','incorporation','governance','compliance','regulation','audit'],
+    desc:'Legal, compliance, DPIIT filings, policy.', models:[{n:'Claude Sonnet',p:true},{n:'Claude Opus',p:false}], sample:'Prepare DPIIT incorporation paperwork for AEOS Pvt Ltd' },
+];
+const EXAMPLES = [
+  "run a penetration test on the QTRA pilot environment",
+  "draft the Series A investor deck and fundraise narrative",
+  "fix the GSAP animation bug on the MIRRCWEM site",
+  "fine-tune the routing model on new agent task data",
+  "prepare DPIIT incorporation paperwork for AEOS Pvt Ltd",
+];
+
+const nodesEl = document.getElementById('nodes');
+DIVISIONS.forEach(d=>{
+  const div = document.createElement('div');
+  div.className = 'node'; div.id = 'node-'+d.id;
+  div.innerHTML = `<span class="pip"></span><span>${d.label}</span><span class="lead">${d.lead}</span>`;
+  nodesEl.appendChild(div);
+});
+const exEl = document.getElementById('examples');
+EXAMPLES.forEach(ex=>{
+  const b = document.createElement('button');
+  b.className = 'ex-btn'; b.textContent = ex.length>32? ex.slice(0,32)+'…':ex; b.title = ex;
+  b.onclick = ()=>{ document.getElementById('taskInput').value = ex; route(); };
+  exEl.appendChild(b);
+});
+
+const logEl = document.getElementById('log');
+const decisionEl = document.getElementById('decision');
+const input = document.getElementById('taskInput');
+const runBtn = document.getElementById('runBtn');
+function clearLog(){ logEl.innerHTML = ''; }
+function appendLine(text, cls){
+  const line = document.createElement('div');
+  const time = new Date().toLocaleTimeString('en-GB',{hour12:false});
+  line.innerHTML = `<span class="t">[${time}]</span><span class="${cls||''}">${text}</span>`;
+  logEl.appendChild(line); logEl.scrollTop = logEl.scrollHeight;
+}
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function scoreTask(text){
+  const lower = text.toLowerCase();
+  const scores = DIVISIONS.map(d=>{
+    let score = 0; d.keywords.forEach(k=>{ if(lower.includes(k)) score += 1; });
+    return { div:d, score };
+  });
+  scores.sort((a,b)=>b.score-a.score);
+  const top = scores[0];
+  const totalHits = scores.reduce((s,x)=>s+x.score,0);
+  let confidence = totalHits===0 ? 0.42 : Math.min(0.97, 0.55 + (top.score/totalHits)*0.42);
+  const fallback = totalHits===0;
+  return { top: fallback ? DIVISIONS.find(d=>d.id==='product') : top.div, confidence, fallback };
+}
+let running = false;
+async function route(){
+  if(running) return;
+  const text = input.value.trim();
+  if(!text){ input.focus(); return; }
+  running = true; runBtn.disabled = true; clearLog();
+  document.querySelectorAll('.node').forEach(n=>n.classList.remove('active'));
+  decisionEl.innerHTML = '<div class="empty-state">Routing in progress<span class="cursor"></span></div>';
+  appendLine(`task received: <span class="mono">"${text}"</span>`, 'lvl-router');
+  await sleep(260);
+  appendLine('capability router: scoring task against 7 divisions…', 'lvl-router');
+  await sleep(400);
+  const result = scoreTask(text);
+  const { top, confidence, fallback } = result;
+  appendLine(`router: top match → <b>${top.label}</b> ${fallback?'(no strong keyword match, defaulted to Product for triage)':''}`, 'lvl-router');
+  await sleep(300);
+  document.getElementById('node-'+top.id).classList.add('active');
+  appendLine(`dispatch: handing off to ${top.lead}`, 'lvl-agent');
+  await sleep(360);
+  const isSecurity = top.id === 'security';
+  if(isSecurity){ appendLine('governance: security-tagged task → compliance check triggered', 'lvl-sec'); await sleep(280); }
+  appendLine(`${top.lead}: spinning up specialist agent…`, 'lvl-agent'); await sleep(320);
+  appendLine('specialist agent: scoping subtasks, estimating effort', 'lvl-agent'); await sleep(340);
+  appendLine(`routing complete — confidence ${(confidence*100).toFixed(0)}%`, 'lvl-ok');
+  const agentCount = isSecurity ? 3 : (fallback ? 2 : 2 + (top.id==='engineering'?1:0));
+  const eta = isSecurity ? '2–4 business days (security review)' : fallback ? '1–2 business days (triage)' : '4–12 hours';
+  let html = '';
+  html += `<div class="field"><div class="k">Assigned Division</div><div class="v cyan">${top.label}</div></div>`;
+  html += `<div class="field"><div class="k">Confidence</div><div class="v">${(confidence*100).toFixed(0)}%</div><div class="bar-bg"><div class="bar-fill" id="barfill"></div></div></div>`;
+  html += `<div class="field"><div class="k">Agent Chain</div><div class="v amber">${agentCount} agents</div>
+    <div style="margin-top:6px;"><span class="chip">CEO-Agent</span><span class="chip">${top.lead}</span><span class="chip">Specialist${agentCount>2?'s':''}</span>${isSecurity?'<span class="chip">Compliance</span>':''}</div></div>`;
+  html += `<div class="field"><div class="k">Estimated Turnaround</div><div class="v">${eta}</div></div>`;
+  if(isSecurity){ html += `<div class="sec-flag">⚠ This task touches QTRA's security surface — routed with a mandatory governance/compliance check before execution.</div>`; }
+  decisionEl.innerHTML = html;
+  requestAnimationFrame(()=>{ const bf=document.getElementById('barfill'); if(bf) bf.style.width=(confidence*100)+'%'; });
+  running = false; runBtn.disabled = false;
+}
+runBtn.addEventListener('click', route);
+input.addEventListener('keydown', e=>{ if(e.key==='Enter') route(); });
+
+/* ---------------- VIEW 2: CAPABILITY MAP ---------------- */
+const capGrid = document.getElementById('capGrid');
+DIVISIONS.forEach(d=>{
+  const card = document.createElement('div');
+  card.className = 'cap-card';
+  card.innerHTML = `
+    <div class="cap-top"><div class="cap-name">${d.label}</div><div class="cap-id">${d.lead}</div></div>
+    <div class="cap-desc">${d.desc}</div>
+    <div class="cap-models">${d.models.map(m=>`<span class="model-chip ${m.p?'primary':''}">${m.n}</span>`).join('')}</div>
+    <div class="toggle-hint">click to expand routing detail ↓</div>
+    <div class="cap-detail">
+      <div class="row"><span class="k">Routing keywords</span><span>${d.keywords.slice(0,5).join(', ')}…</span></div>
+      <div class="row"><span class="k">Sample task</span><span>"${d.sample}"</span></div>
+      <div class="row"><span class="k">Default agent chain</span><span>CEO → ${d.lead} → Specialist</span></div>
+    </div>`;
+  card.onclick = ()=> card.classList.toggle('open');
+  capGrid.appendChild(card);
+});
+
+/* ---------------- VIEW 3: LIFECYCLE ---------------- */
+const PHASES = [
+  {n:1,t:'Intake & Triage',d:'Task or initiative enters AEOS; capability router scores and assigns it to a division.'},
+  {n:2,t:'Feasibility Check',d:'Division lead confirms scope is achievable with current models/agents and resourcing.'},
+  {n:3,t:'Research & Validation',d:'Market, technical, or regulatory validation before committing build resources.'},
+  {n:4,t:'Spec & Scoping',d:'Concrete requirements, success criteria, and acceptance tests are written down.'},
+  {n:5,t:'Architecture / Design',d:'Technical or product architecture decided; model routing config set for the task.'},
+  {n:6,t:'Resourcing',d:'Agent chain assembled — specialist agents allocated, compute/budget reserved.'},
+  {n:7,t:'Build / Execution',d:'Specialist agents execute; engineering or content work happens here.'},
+  {n:8,t:'Internal Review',d:'Division lead reviews output against the spec from Phase 4.'},
+  {n:9,t:'Security & Compliance Gate',d:'Mandatory for anything QTRA-adjacent or handling sensitive data — governance sign-off.'},
+  {n:10,t:'Stakeholder Review',d:'Founder/leadership review for strategic fit before external exposure.'},
+  {n:11,t:'Deployment / Delivery',d:'Shipped — to production, to a client, or to an investor/grant evaluator.'},
+  {n:12,t:'Monitoring',d:'Metrics from the Governance dashboard track real-world performance post-delivery.'},
+  {n:13,t:'Retrospective & Feedback Loop',d:"Learnings feed back into the capability router's scoring weights and division playbooks."},
+];
+const CURRENT_PHASE = 4; // AEOS is in spec/charter-writing stage per current status
+const lcBar = document.getElementById('lcBar');
+const lcGrid = document.getElementById('lcGrid');
+const lcDetail = document.getElementById('lcDetail');
+PHASES.forEach(p=>{
+  const seg = document.createElement('div');
+  seg.className = 'lc-seg' + (p.n < CURRENT_PHASE ? ' done' : p.n===CURRENT_PHASE ? ' current' : '');
+  seg.onclick = ()=> showPhase(p.n);
+  lcBar.appendChild(seg);
+  const card = document.createElement('div');
+  card.className = 'lc-card' + (p.n < CURRENT_PHASE ? ' done' : p.n===CURRENT_PHASE ? ' current' : '');
+  card.innerHTML = `<div class="lc-num">PHASE ${String(p.n).padStart(2,'0')}</div><div class="lc-title">${p.t}</div>`;
+  card.onclick = ()=> showPhase(p.n);
+  lcGrid.appendChild(card);
+});
+function showPhase(n){
+  const p = PHASES.find(x=>x.n===n);
+  const status = n < CURRENT_PHASE ? 'Completed' : n===CURRENT_PHASE ? 'Current phase — AEOS charter & fundraise prep' : 'Upcoming';
+  lcDetail.innerHTML = `<h4>Phase ${p.n} — ${p.t} <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--steel);font-weight:400;">(${status})</span></h4><p>${p.d}</p>`;
+}
+showPhase(CURRENT_PHASE);
+
+/* ---------------- VIEW 4: METRICS ---------------- */
+const METRIC_SECTIONS = [
+  { title:'Enterprise Metrics (§15.19 target ranges)', metrics:[
+      {l:'Routing accuracy (task → correct division)', v:'≥90%', n:'measured against human-labeled eval set, pre-launch target'},
+      {l:'Avg. task turnaround (non-security)', v:'<12 hrs', n:'intake to delivery, steady state'},
+      {l:'Avg. task turnaround (security/QTRA)', v:'<4 days', n:'includes mandatory compliance gate'},
+      {l:'Agent cost per task', v:'<₹150', n:'blended model/compute cost, target at scale'},
+      {l:'Division utilization balance', v:'±15%', n:'no single division >15% over capacity'},
+    ]},
+  { title:'Governance Metrics (§16.15 target ranges)', metrics:[
+      {l:'Security/compliance gate pass rate', v:'≥95%', n:'first-pass, before re-review needed'},
+      {l:'Audit frequency (QTRA-linked work)', v:'Monthly', n:'internal audit cadence'},
+      {l:'Data sovereignty compliance', v:'100%', n:'India-hosted/processed where mandated'},
+      {l:'Incident response time (critical)', v:'<4 hrs', n:'detection to containment'},
+    ]},
+  { title:'Fundraise / Operating Targets', metrics:[
+      {l:'Runway from ₹4.5 cr raise', v:'24 mo', n:'per financial model'},
+      {l:'Headcount by month 18', v:'4 + founder', n:'engineering/ops, per headcount plan'},
+      {l:'Pilot clients by month 12', v:'2–3', n:'QTRA + one AEOS-hosted venture'},
+      {l:'DPIIT recognition', v:'Target M2', n:'prerequisite for govt scheme eligibility'},
+    ]},
+];
+const metWrap = document.getElementById('metSections');
+METRIC_SECTIONS.forEach(s=>{
+  const sec = document.createElement('div');
+  sec.className = 'met-section';
+  sec.innerHTML = `<h4>${s.title}</h4><div class="met-grid">${s.metrics.map(m=>`
+    <div class="met-card"><div class="met-label">${m.l}</div><div class="met-target">${m.v}</div><div class="met-note">${m.n}</div></div>`).join('')}</div>`;
+  metWrap.appendChild(sec);
+});
+</script>
+</body>
+</html>
